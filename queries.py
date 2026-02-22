@@ -1,5 +1,5 @@
 from sqlalchemy import func, case
-from database import Vehicle, Complaint
+from database import Vehicle, Complaint, Recall
 
 
 def get_vehicle(session, make: str, model: str, year: int):
@@ -72,3 +72,14 @@ def search_by_symptom(session, vehicle_id: int, text: str, limit: int = 50):
         .all()
     )
     return q
+
+def get_recalls(session, vehicle_id: int):
+    return (
+        session.query(Recall)
+        .filter(Recall.vehicle_id == vehicle_id)
+        .order_by(Recall.report_received_date.desc().nullslast())
+        .all()
+    )
+
+def recall_count(session, vehicle_id: int) -> int:
+    return session.query(func.count(Recall.id)).filter(Recall.vehicle_id == vehicle_id).scalar() or 0

@@ -28,6 +28,7 @@ class Vehicle(Base):
     year = Column(Integer, nullable=False)
 
     complaints = relationship("Complaint", back_populates="vehicle", cascade="all, delete-orphan")
+    recalls = relationship("Recall", back_populates="vehicle", cascade="all, delete-orphan")
 
     __table_args__ = (UniqueConstraint("make", "model", "year", name="uq_vehicle"),)
 
@@ -60,6 +61,27 @@ class Complaint(Base):
     vehicle = relationship("Vehicle", back_populates="complaints")
 
     __table_args__ = (UniqueConstraint("odi_number", name="uq_complaint_odi"),)
+
+class Recall(Base):
+    __tablename__ = "recalls"
+
+    id = Column(Integer, primary_key=True)
+
+    vehicle_id = Column(Integer, ForeignKey("vehicles.id"), nullable=False)
+
+    campaign_number = Column(String, nullable=False)   # e.g., NHTSA campaign number
+    recall_number = Column(String, nullable=True)      # manufacturer recall number (if present)
+    report_received_date = Column(Date, nullable=True)
+
+    component = Column(String, nullable=True)
+    summary = Column(Text, nullable=True)
+    consequence = Column(Text, nullable=True)
+    remedy = Column(Text, nullable=True)
+    notes = Column(Text, nullable=True)
+
+    vehicle = relationship("Vehicle", back_populates="recalls")
+
+    __table_args__ = (UniqueConstraint("vehicle_id", "campaign_number", name="uq_vehicle_campaign"),)
 
 
 def init_db():

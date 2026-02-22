@@ -3,7 +3,7 @@ from datetime import datetime
 import requests
 
 from sqlalchemy.exc import IntegrityError
-from database import SessionLocal, init_db, Vehicle, Complaint
+from database import SessionLocal, init_db, Vehicle, Complaint, Recall
 
 
 def _parse_date(s):
@@ -22,6 +22,13 @@ def _parse_date(s):
 
 def fetch_complaints_by_vehicle(make: str, model: str, year: int):
     url = "https://api.nhtsa.gov/complaints/complaintsByVehicle"
+    params = {"make": make, "model": model, "modelYear": year}
+    resp = requests.get(url, params=params, timeout=30)
+    resp.raise_for_status()
+    return resp.json()
+
+def fetch_recalls_by_vehicle(make: str, model: str, year: int):
+    url = "https://api.nhtsa.gov/recalls/recallsByVehicle"
     params = {"make": make, "model": model, "modelYear": year}
     resp = requests.get(url, params=params, timeout=30)
     resp.raise_for_status()
@@ -94,15 +101,50 @@ def ingest_complaints(session, vehicle: Vehicle, complaints_json: dict) -> int:
 
     return inserted
 
+def ingest_recalls(session, vehicle: Vehicle, recalls_json: dict) -> int:
+    results = recalls_json.get("results", [])
+    inserted = 0
 
-def ingest_vehicle(make: str, model: str, year: int) -> int:
+    for r in results:
+        # Field names vary a bit; handle common ones safely.
+        campaign = (r.get("NHTSACampaignNumber") or r.get("nhtsaCampaignNumber") or r.get("campaignNumber") or "").strip()
+        if not campaign:
+            continue
+
+        rec = Recall(
+            vehicle_id=vehicle.id,
+            campaign_number=campaign,
+            recall_number=r.get("RecallNumber") or r.get("ManufacturerRecallNumber"),
+            report_received_date=_parse_date(r.get("ReportReceivedDate") or r.get("reportReceivedDate")),
+            component=r.get("Component") or r.get("component"),
+            summary=r.get("Summary") or r.get("summary"),
+            consequence=r.get("Conequence") or r.get("Consequence") or r.get("consequence"),
+            remedy=r.get("Remedy") or r.get("remedy"),
+            notes=r.get("Notes") or r.get("notes"),
+        )
+
+        session.add(rec)
+        try:
+            session.commit()
+            inserted += 1
+        except IntegrityError:
+            session.rollback()
+
+    return inserted
+
+def ingest_vehicle(make: str, model: str, year: int):
     init_db()
     session = SessionLocal()
     try:
         vehicle = get_or_create_vehicle(session, make, model, year)
-        data = fetch_complaints_by_vehicle(make, model, year)
-        inserted = ingest_complaints(session, vehicle, data)
-        return inserted
+
+        complaints_json = fetch_complaints_by_vehicle(make, model, year)
+        new_complaints = ingest_complaints(session, vehicle, complaints_json)
+
+        recalls_json = fetch_recalls_by_vehicle(make, model, year)
+        new_recalls = ingest_recalls(session, vehicle, recalls_json)
+
+        return new_complaints, new_recalls
     finally:
         session.close()
 

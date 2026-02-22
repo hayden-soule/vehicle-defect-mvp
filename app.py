@@ -10,6 +10,8 @@ from queries import (
     top_components,
     complaints_over_time,
     search_by_symptom,
+    recall_count,
+    get_recalls
 )
 
 st.set_page_config(page_title="SLP Defect Tool", layout="wide")
@@ -23,9 +25,11 @@ with st.sidebar:
     model = st.text_input("Model", value="ACCORD")
     year = st.number_input("Year", min_value=1990, max_value=2026, value=2021)
 
-    if st.button("Ingest / Refresh NHTSA Complaints"):
-        inserted = ingest_vehicle(make, model, int(year))
-        st.success(f"Ingestion complete. Inserted {inserted} new complaints.")
+    if st.button("Ingest / Refresh NHTSA Data"):
+        new_complaints, new_recalls = ingest_vehicle(make, model, int(year))
+        st.success(
+            f"Ingestion complete. Inserted {new_complaints} new complaints and {new_recalls} new recalls."
+        )
 
     st.divider()
     st.header("Symptom Search")
@@ -47,6 +51,28 @@ try:
     c3.metric("Fires", sev["fires"])
     c4.metric("Injuries", sev["injuries"])
     c5.metric("Deaths", sev["deaths"])
+
+    
+    r_total = recall_count(session, vehicle.id)
+    st.metric("Recalls", r_total)
+
+    st.subheader("Recalls")
+    recalls = get_recalls(session, vehicle.id)
+
+    rows = []
+    for r in recalls:
+        rows.append({
+            "Campaign": r.campaign_number,
+            "Report Date": r.report_received_date,
+            "Component": r.component,
+            "Summary": (r.summary or "")[:200],
+            "Remedy": (r.remedy or "")[:200],
+        })
+
+    if rows:
+        st.dataframe(pd.DataFrame(rows), use_container_width=True)
+    else:
+        st.info("No recalls found for this vehicle.")
 
     left, right = st.columns(2)
 
