@@ -17,19 +17,43 @@ from queries import (
 st.set_page_config(page_title="SLP Defect Tool", layout="wide")
 init_db()
 
-st.title("SLP Vehicle Defect Intelligence Tool (MVP)")
+st.title("SLP Vehicle Defect Pattern Intelligence Tool (MVP)")
 
 with st.sidebar:
-    st.header("Vehicle Lookup")
-    make = st.text_input("Make", value="HONDA")
-    model = st.text_input("Model", value="ACCORD")
-    year = st.number_input("Year", min_value=1990, max_value=2026, value=2021)
+    st.header("Lookup")
 
-    if st.button("Ingest / Refresh NHTSA Data"):
-        new_complaints, new_recalls = ingest_vehicle(make, model, int(year))
-        st.success(
-            f"Ingestion complete. Inserted {new_complaints} new complaints and {new_recalls} new recalls."
-        )
+    lookup_mode = st.radio("Search by", ["VIN", "Make/Model/Year"])
+
+    vin = ""
+    make = "HONDA"
+    model = "ACCORD"
+    year = 2021
+
+    if lookup_mode == "VIN":
+        vin = st.text_input("VIN (17 characters)")
+    else:
+        make = st.text_input("Make", value="HONDA")
+        model = st.text_input("Model", value="ACCORD")
+        year = st.number_input("Year", min_value=1990, max_value=2026, value=2021)
+
+    if st.button("ENTER"):
+        if lookup_mode == "VIN":
+            from ingestion import ingest_vin
+            try:
+                decoded, new_complaints, new_recalls = ingest_vin(vin)
+                # Update downstream variables so the rest of the app loads correctly
+                make, model, year = decoded["make"], decoded["model"], decoded["year"]
+                st.success(
+                    f"VIN decoded → {year} {make} {model}. "
+                    f"Inserted {new_complaints} complaints and {new_recalls} recalls."
+                )
+            except Exception as e:
+                st.error(str(e))
+        else:
+            new_complaints, new_recalls = ingest_vehicle(make, model, int(year))
+            st.success(
+                f"Ingestion complete. Inserted {new_complaints} complaints and {new_recalls} recalls."
+            )
 
     st.divider()
     st.header("Symptom Search")
@@ -41,6 +65,8 @@ try:
     if not vehicle:
         st.warning("Vehicle not in database yet. Click 'Ingest / Refresh' in the sidebar.")
         st.stop()
+
+    st.markdown(f"## {vehicle.year} {vehicle.make} {vehicle.model}")
 
     total = complaint_count(session, vehicle.id)
     sev = severity_summary(session, vehicle.id)

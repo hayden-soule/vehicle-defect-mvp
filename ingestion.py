@@ -5,6 +5,44 @@ import requests
 from sqlalchemy.exc import IntegrityError
 from database import SessionLocal, init_db, Vehicle, Complaint, Recall
 
+def decode_vin(vin: str):
+    """
+    Decode a VIN using NHTSA vPIC to get Make/Model/ModelYear.
+    Returns dict: {"vin": ..., "make": ..., "model": ..., "year": ...}
+    """
+    vin = (vin or "").strip().upper()
+    if len(vin) != 17:
+        return None
+
+    url = f"https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/{vin}"
+    params = {"format": "json"}
+
+    resp = requests.get(url, params=params, timeout=30)
+    resp.raise_for_status()
+    data = resp.json()
+
+    results = data.get("Results", [])
+    if not results:
+        return None
+
+    r = results[0]
+    make = (r.get("Make") or "").strip()
+    model = (r.get("Model") or "").strip()
+    year = (r.get("ModelYear") or "").strip()
+
+    if not (make and model and year.isdigit()):
+        return None
+
+    return {"vin": vin, "make": make, "model": model, "year": int(year)}
+
+def ingest_vin(vin: str):
+    decoded = decode_vin(vin)
+    if not decoded:
+        raise ValueError("Could not decode VIN (check VIN and try again).")
+
+    # Reuse your existing ingestion pipeline
+    new_complaints, new_recalls = ingest_vehicle(decoded["make"], decoded["model"], decoded["year"])
+    return decoded, new_complaints, new_recalls
 
 def _parse_date(s):
     """Parse common NHTSA date strings to date objects."""
