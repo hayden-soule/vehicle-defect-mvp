@@ -45,14 +45,14 @@ with st.sidebar:
                 make, model, year = decoded["make"], decoded["model"], decoded["year"]
                 st.success(
                     f"VIN decoded → {year} {make} {model}. "
-                    f"Inserted {new_complaints} complaints and {new_recalls} recalls."
+                    f"Found {new_complaints} complaints and {new_recalls} recalls."
                 )
             except Exception as e:
                 st.error(str(e))
         else:
             new_complaints, new_recalls = ingest_vehicle(make, model, int(year))
             st.success(
-                f"Ingestion complete. Inserted {new_complaints} complaints and {new_recalls} recalls."
+                f"Vehicle selected. Found {new_complaints} complaints and {new_recalls} recalls."
             )
 
     st.divider()
@@ -63,7 +63,7 @@ session = SessionLocal()
 try:
     vehicle = get_vehicle(session, make, model, int(year))
     if not vehicle:
-        st.warning("Vehicle not in database yet. Click 'Ingest / Refresh' in the sidebar.")
+        st.warning("Click 'ENTER' in the sidebar to view vehicle statistics.")
         st.stop()
 
     st.markdown(f"## {vehicle.year} {vehicle.make} {vehicle.model}")
@@ -103,7 +103,7 @@ try:
     left, right = st.columns(2)
 
     with left:
-        st.subheader("Top Reported Components (MVP grouping)")
+        st.subheader("Top Reported Complaints by Component")
         comp = top_components(session, vehicle.id, limit=12)
         dfc = pd.DataFrame(comp)
         st.dataframe(dfc, use_container_width=True)
@@ -118,7 +118,7 @@ try:
         else:
             st.info("No dated complaints available for trend chart.")
 
-    st.subheader("Complaint Search Results")
+    st.subheader("Symptom Search Results")
     if symptom.strip():
         hits = search_by_symptom(session, vehicle.id, symptom.strip(), limit=50)
         rows = []
